@@ -5,6 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+
+	"github.com/fatih/color"
+	"github.com/schollz/progressbar/v3"
 
 	"goreleaser-helper/internal/config"
 )
@@ -43,6 +47,7 @@ type BuildResult struct {
 // BuildBinaries builds binaries for all configured platforms
 func BuildBinaries(opts BuildOptions) ([]BuildResult, error) {
 	var results []BuildResult
+	var mu sync.Mutex
 
 	// Create output directory
 	outputDir := filepath.Join(opts.Config.Build.OutputDir, opts.Version)
@@ -50,15 +55,57 @@ func BuildBinaries(opts BuildOptions) ([]BuildResult, error) {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Build for each platform
+	color.Blue("🔨 Building binaries for %d platforms...", len(opts.Config.Build.Platforms))
+
+	// Create progress bar
+	bar := progressbar.NewOptions(len(opts.Config.Build.Platforms),
+		progressbar.OptionSetDescription("Building binaries..."),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "=",
+			SaucerHead:    ">",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+
+	// Create error channel and wait group
+	errChan := make(chan error, len(opts.Config.Build.Platforms))
+	var wg sync.WaitGroup
+
+	// Build for each platform concurrently
 	for _, platform := range opts.Config.Build.Platforms {
-		result, err := buildForPlatform(opts, platform.OS, platform.Arch, outputDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build for %s/%s: %w", platform.OS, platform.Arch, err)
-		}
-		results = append(results, result)
+		wg.Add(1)
+		go func(p struct {
+			OS   string `yaml:"os"`
+			Arch string `yaml:"arch"`
+		}) {
+			defer wg.Done()
+			result, err := buildForPlatform(opts, p.OS, p.Arch, outputDir)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to build for %s/%s: %w", p.OS, p.Arch, err)
+				return
+			}
+			mu.Lock()
+			results = append(results, result)
+			mu.Unlock()
+			bar.Add(1)
+		}(platform)
 	}
 
+	// Wait for all builds to complete
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors
+	for err := range errChan {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	color.Green("✅ All binaries built successfully!")
 	return results, nil
 }
 
