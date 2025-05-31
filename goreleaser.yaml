@@ -62,22 +62,4 @@ github:
     - "v1.1.0"
   teams:
     - "maintainers"
-    - "contributors"
-
-notifications:
-  slack:
-    enabled: false
-    webhook: ""
-  discord:
-    enabled: false
-    webhook: ""
-  email:
-    enabled: false
-    from: "releases@example.com"
-    to:
-      - "team@example.com"
-    smtp:
-      host: "smtp.example.com"
-      port: 587
-      username: ""
-      password: "" 
+    - "contributors" 

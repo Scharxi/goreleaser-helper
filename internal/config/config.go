@@ -63,29 +63,6 @@ type Config struct {
 		Milestones  []string `yaml:"milestones"`
 		Teams       []string `yaml:"teams"`
 	} `yaml:"github"`
-
-	// Notifications configuration
-	Notifications struct {
-		Slack struct {
-			Enabled bool   `yaml:"enabled"`
-			Webhook string `yaml:"webhook"`
-		} `yaml:"slack"`
-		Discord struct {
-			Enabled bool   `yaml:"enabled"`
-			Webhook string `yaml:"webhook"`
-		} `yaml:"discord"`
-		Email struct {
-			Enabled bool     `yaml:"enabled"`
-			From    string   `yaml:"from"`
-			To      []string `yaml:"to"`
-			SMTP    struct {
-				Host     string `yaml:"host"`
-				Port     int    `yaml:"port"`
-				Username string `yaml:"username"`
-				Password string `yaml:"password"`
-			} `yaml:"smtp"`
-		} `yaml:"email"`
-	} `yaml:"notifications"`
 }
 
 // Load reads and parses the configuration file
