@@ -120,6 +120,35 @@ goreleaser-helper release --version 1.0.0 --repo owner/repo --config custom-conf
 
 2. Make sure your repository is properly configured in the `goreleaser.yaml` file.
 
+### GitHub Token Permissions
+
+The GitHub token requires the following permissions to function properly:
+
+1. **Repository Permissions**:
+   - `repo` (Full control of private repositories)
+     - Required for creating releases and uploading assets
+     - Required for reading repository information
+     - Required for managing release assets
+
+2. **Workflow Permissions**:
+   - `workflow` (Update GitHub Action workflows)
+     - Required if you're using GitHub Actions for releases
+
+To create a token with the correct permissions:
+
+1. Go to GitHub Settings → Developer Settings → Personal Access Tokens → Tokens (classic)
+2. Click "Generate new token"
+3. Select the following scopes:
+   - `repo` (Full control of private repositories)
+   - `workflow` (Optional, if using GitHub Actions)
+4. Set an expiration date (recommended for security)
+5. Generate the token and copy it
+
+For organization repositories, you might need to:
+1. Request organization approval for the token
+2. Ensure the token has access to the specific repository
+3. Consider using a GitHub App instead of a personal access token for better security
+
 ## Commit Message Format
 
 The changelog generator uses conventional commit messages. Follow this format for your commits:
