@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"goreleaser-helper/internal/build"
+	"goreleaser-helper/internal/github"
+
 	"github.com/spf13/cobra"
 )
 
@@ -68,11 +71,39 @@ func generateChangelog(tag string) error {
 }
 
 func buildBinaries(tag string) error {
-	// TODO: Implement binary building for different platforms
-	return nil
+	distDir := filepath.Join("dist", tag)
+
+	// Prepare build options
+	opts := build.BuildOptions{
+		OutputDir: distDir,
+		Version:   tag,
+		MainFile:  "main.go",
+		LdFlags:   fmt.Sprintf("-X main.version=%s", tag),
+	}
+
+	// Build binaries for all platforms
+	return build.Build(opts)
 }
 
 func createGitHubRelease(repo, tag string) error {
-	// TODO: Implement GitHub release creation using GitHub API
-	return nil
+	// Parse repository URL
+	owner, repoName, err := github.ParseRepoURL(repo)
+	if err != nil {
+		return fmt.Errorf("failed to parse repository URL: %w", err)
+	}
+
+	// Prepare release options
+	opts := github.ReleaseOptions{
+		Owner:       owner,
+		Repo:        repoName,
+		Tag:         tag,
+		Title:       fmt.Sprintf("Release %s", tag),
+		Description: fmt.Sprintf("Release version %s", tag), // TODO: Add changelog content
+		AssetsDir:   filepath.Join("dist", tag),
+		Draft:       false,
+		Prerelease:  false,
+	}
+
+	// Create the release
+	return github.CreateRelease(opts)
 }
