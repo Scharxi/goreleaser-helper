@@ -3,134 +3,97 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-
-	"goreleaser-helper/internal/build"
-	"goreleaser-helper/internal/config"
-	"goreleaser-helper/internal/github"
 
 	"github.com/spf13/cobra"
+
+	"goreleaser-helper/internal/build"
+	"goreleaser-helper/internal/changelog"
+	"goreleaser-helper/internal/config"
+	"goreleaser-helper/internal/github"
 )
 
 var (
-	draft      bool
-	prerelease bool
-	cfg        *config.Config
+	version     string
+	repo        string
+	configPath  string
+	generateChg bool
 )
 
 var releaseCmd = &cobra.Command{
 	Use:   "release",
 	Short: "Create a new release",
-	Long:  `Create a new release with the specified version tag and repository.`,
+	Long:  `Create a new release with binaries and changelog`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		repo, _ := cmd.Flags().GetString("repo")
-		tag, _ := cmd.Flags().GetString("tag")
-		configPath, _ := cmd.Flags().GetString("config")
-
 		// Load configuration
-		var err error
-		cfg, err = config.Load(configPath)
+		cfg, err := config.Load(configPath)
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		// Use default repo from config if not specified
+		// Use default repository from config if not specified
 		if repo == "" {
 			repo = cfg.GitHub.DefaultRepo
 		}
+
+		// Check required flags
+		if version == "" {
+			return fmt.Errorf("version is required")
+		}
 		if repo == "" {
-			return fmt.Errorf("repository URL is required (either via --repo flag or config file)")
+			return fmt.Errorf("repository is required")
 		}
 
-		if tag == "" {
-			return fmt.Errorf("tag is required")
-		}
-
-		tokenEnv := cfg.GitHub.TokenEnv
-		if os.Getenv(tokenEnv) == "" {
-			return fmt.Errorf("the %s environment variable must be set", tokenEnv)
-		}
-
-		// Create release directory structure
-		if err := createReleaseStructure(tag); err != nil {
-			return fmt.Errorf("failed to create release structure: %w", err)
+		// Check for GitHub token
+		token := os.Getenv(cfg.GitHub.TokenEnv)
+		if token == "" {
+			return fmt.Errorf("GitHub token not found in environment variable %s", cfg.GitHub.TokenEnv)
 		}
 
 		// Generate changelog if enabled
-		if cfg.Release.Changelog.Enabled {
-			if err := generateChangelog(tag); err != nil {
+		if cfg.Release.Changelog.Enabled || generateChg {
+			gen := changelog.NewGenerator(cfg, repo)
+			if err := gen.Generate(version); err != nil {
 				return fmt.Errorf("failed to generate changelog: %w", err)
 			}
 		}
 
 		// Build binaries
-		if err := buildBinaries(tag); err != nil {
+		buildOpts := build.BuildOptions{
+			Version:  version,
+			Config:   cfg,
+			MainFile: cfg.Build.MainFile,
+			LdFlags:  cfg.Build.LdFlags,
+		}
+
+		binaries, err := build.BuildBinaries(buildOpts)
+		if err != nil {
 			return fmt.Errorf("failed to build binaries: %w", err)
 		}
 
 		// Create GitHub release
-		if err := createGitHubRelease(repo, tag); err != nil {
-			return fmt.Errorf("failed to create GitHub release: %w", err)
+		releaseOpts := github.ReleaseOptions{
+			Version:  version,
+			Repo:     repo,
+			Token:    token,
+			Binaries: binaries,
+			Config:   cfg,
 		}
 
-		fmt.Printf("Successfully created release %s\n", tag)
+		if err := github.CreateRelease(releaseOpts); err != nil {
+			return fmt.Errorf("failed to create release: %w", err)
+		}
+
+		fmt.Printf("Successfully created release %s\n", version)
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(releaseCmd)
-	releaseCmd.Flags().StringP("repo", "r", "", "GitHub repository URL (e.g., github.com/user/repo)")
-	releaseCmd.Flags().StringP("tag", "t", "", "Release tag (e.g., v1.0.0)")
-	releaseCmd.Flags().StringP("config", "c", "goreleaser.yaml", "Path to configuration file")
-	releaseCmd.Flags().BoolVar(&draft, "draft", false, "Create a draft release")
-	releaseCmd.Flags().BoolVar(&prerelease, "prerelease", false, "Create a prerelease")
-	releaseCmd.MarkFlagRequired("tag")
-}
 
-func createReleaseStructure(tag string) error {
-	distDir := filepath.Join("dist", tag)
-	return os.MkdirAll(distDir, 0755)
-}
-
-func generateChangelog(tag string) error {
-	// TODO: Implement changelog generation
-	return nil
-}
-
-func buildBinaries(tag string) error {
-	distDir := filepath.Join("dist", tag)
-
-	// Prepare build options
-	opts := build.BuildOptions{
-		OutputDir: distDir,
-		Version:   tag,
-		Config:    cfg,
-	}
-
-	// Build binaries for all platforms
-	return build.Build(opts)
-}
-
-func createGitHubRelease(repo, tag string) error {
-	// Parse repository URL
-	owner, repoName, err := github.ParseRepoURL(repo)
-	if err != nil {
-		return fmt.Errorf("failed to parse repository URL: %w", err)
-	}
-
-	// Prepare release options
-	opts := github.ReleaseOptions{
-		Owner:       owner,
-		Repo:        repoName,
-		Tag:         tag,
-		Title:       fmt.Sprintf("Release %s", tag),
-		Description: fmt.Sprintf("Release version %s", tag), // TODO: Add changelog content
-		AssetsDir:   filepath.Join("dist", tag),
-		Draft:       draft,
-		Prerelease:  prerelease,
-	}
-
-	// Create the release
-	return github.CreateRelease(opts)
+	// Add flags
+	releaseCmd.Flags().StringVarP(&version, "version", "v", "", "Version to release")
+	releaseCmd.Flags().StringVarP(&repo, "repo", "r", "", "GitHub repository (owner/repo)")
+	releaseCmd.Flags().StringVarP(&configPath, "config", "c", "goreleaser.yaml", "Path to configuration file")
+	releaseCmd.Flags().BoolVarP(&generateChg, "changelog", "g", false, "Generate changelog")
 }
