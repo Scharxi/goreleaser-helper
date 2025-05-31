@@ -11,6 +11,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	draft      bool
+	prerelease bool
+)
+
 var releaseCmd = &cobra.Command{
 	Use:   "release",
 	Short: "Create a new release",
@@ -56,6 +61,8 @@ func init() {
 	rootCmd.AddCommand(releaseCmd)
 	releaseCmd.Flags().StringP("repo", "r", "", "GitHub repository URL (e.g., github.com/user/repo)")
 	releaseCmd.Flags().StringP("tag", "t", "", "Release tag (e.g., v1.0.0)")
+	releaseCmd.Flags().BoolVar(&draft, "draft", false, "Create a draft release")
+	releaseCmd.Flags().BoolVar(&prerelease, "prerelease", false, "Create a prerelease")
 	releaseCmd.MarkFlagRequired("repo")
 	releaseCmd.MarkFlagRequired("tag")
 }
@@ -100,8 +107,8 @@ func createGitHubRelease(repo, tag string) error {
 		Title:       fmt.Sprintf("Release %s", tag),
 		Description: fmt.Sprintf("Release version %s", tag), // TODO: Add changelog content
 		AssetsDir:   filepath.Join("dist", tag),
-		Draft:       false,
-		Prerelease:  false,
+		Draft:       draft,
+		Prerelease:  prerelease,
 	}
 
 	// Create the release
