@@ -1,0 +1,13 @@
+# Build output
+/goreleaser-helper
+
+# Go modules
+/go.sum
+
+# IDEs und Editoren
+.vscode/
+.idea/
+*.swp
+
+# Sonstiges
+.DS_Store 
