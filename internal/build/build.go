@@ -81,20 +81,23 @@ func buildForPlatform(opts BuildOptions, goos, arch, outputDir string) (BuildRes
 	}
 
 	// Prepare build command
-	args := []string{"build"}
-	if opts.MainFile != "" {
-		args = append(args, opts.MainFile)
-	}
+	args := []string{"build", "-v"}
 	if opts.LdFlags != "" {
 		args = append(args, "-ldflags", opts.LdFlags)
 	}
 	args = append(args, "-o", outputPath)
+	if opts.MainFile != "" {
+		args = append(args, opts.MainFile)
+	}
 
 	// Execute build command
 	cmd := exec.Command("go", args...)
 	cmd.Env = env
-	if err := cmd.Run(); err != nil {
-		return BuildResult{}, fmt.Errorf("build command failed: %w", err)
+
+	// Capture both stdout and stderr
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("build command failed: %w\nOutput: %s", err, string(output))
 	}
 
 	return BuildResult{

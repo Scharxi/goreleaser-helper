@@ -1,7 +1,7 @@
 package github
 
 import (
-	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -93,54 +93,51 @@ func createRelease(owner, repo string, opts ReleaseOptions) (string, error) {
 		return "", fmt.Errorf("failed to create release: %s", string(body))
 	}
 
-	// Extract release ID from response
-	// Note: In a real implementation, you would parse the JSON response
-	// to get the release ID. For simplicity, we're returning a placeholder.
-	return "release-id", nil
+	// Parse the JSON response to get the release ID
+	var respData struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return "", fmt.Errorf("failed to parse release response: %w", err)
+	}
+
+	return fmt.Sprintf("%d", respData.ID), nil
 }
 
 func uploadAssets(owner, repo, releaseID string, opts ReleaseOptions) error {
 	for _, binary := range opts.Binaries {
-		// Open file
 		file, err := os.Open(binary.Path)
 		if err != nil {
 			return fmt.Errorf("failed to open file %s: %w", binary.Path, err)
 		}
 		defer file.Close()
 
-		// Get file info
 		fileInfo, err := file.Stat()
 		if err != nil {
 			return fmt.Errorf("failed to get file info: %w", err)
 		}
 
-		// Read file content
-		content, err := io.ReadAll(file)
-		if err != nil {
-			return fmt.Errorf("failed to read file: %w", err)
+		// Ensure file pointer is at the start
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return fmt.Errorf("failed to seek file: %w", err)
 		}
 
-		// Prepare upload data
-		data := fmt.Sprintf(`{
-			"name": "%s",
-			"content_type": "application/octet-stream",
-			"size": %d,
-			"content": "%s"
-		}`, filepath.Base(binary.Path), fileInfo.Size(), base64.StdEncoding.EncodeToString(content))
+		assetName := filepath.Base(binary.Path)
+		uploadURL := fmt.Sprintf(
+			"https://uploads.github.com/repos/%s/%s/releases/%s/assets?name=%s",
+			owner, repo, releaseID, assetName,
+		)
 
-		// Create HTTP request
-		url := fmt.Sprintf("https://uploads.github.com/repos/%s/%s/releases/%s/assets", owner, repo, releaseID)
-		req, err := http.NewRequest("POST", url, strings.NewReader(data))
+		req, err := http.NewRequest("POST", uploadURL, file)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
-		// Set headers
 		req.Header.Set("Authorization", "token "+opts.Token)
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("Accept", "application/vnd.github.v3+json")
+		req.ContentLength = fileInfo.Size()
 
-		// Send request
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -148,12 +145,10 @@ func uploadAssets(owner, repo, releaseID string, opts ReleaseOptions) error {
 		}
 		defer resp.Body.Close()
 
-		// Check response status
 		if resp.StatusCode != http.StatusCreated {
 			body, _ := io.ReadAll(resp.Body)
 			return fmt.Errorf("failed to upload asset: %s", string(body))
 		}
 	}
-
 	return nil
 }

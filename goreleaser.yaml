@@ -34,7 +34,7 @@ build:
 release:
   defaultBranch: main
   changelog:
-    enabled: true
+    enabled: false
     path: CHANGELOG.md
     format: markdown
   assets:
