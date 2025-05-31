@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"goreleaser-helper/internal/build"
+	"goreleaser-helper/internal/config"
 	"goreleaser-helper/internal/github"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 var (
 	draft      bool
 	prerelease bool
+	cfg        *config.Config
 )
 
 var releaseCmd = &cobra.Command{
@@ -23,13 +25,30 @@ var releaseCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repo, _ := cmd.Flags().GetString("repo")
 		tag, _ := cmd.Flags().GetString("tag")
+		configPath, _ := cmd.Flags().GetString("config")
 
-		if repo == "" || tag == "" {
-			return fmt.Errorf("both --repo and --tag flags are required")
+		// Load configuration
+		var err error
+		cfg, err = config.Load(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		if os.Getenv("GITHUB_TOKEN") == "" {
-			return fmt.Errorf("the GITHUB_TOKEN environment variable must be set")
+		// Use default repo from config if not specified
+		if repo == "" {
+			repo = cfg.GitHub.DefaultRepo
+		}
+		if repo == "" {
+			return fmt.Errorf("repository URL is required (either via --repo flag or config file)")
+		}
+
+		if tag == "" {
+			return fmt.Errorf("tag is required")
+		}
+
+		tokenEnv := cfg.GitHub.TokenEnv
+		if os.Getenv(tokenEnv) == "" {
+			return fmt.Errorf("the %s environment variable must be set", tokenEnv)
 		}
 
 		// Create release directory structure
@@ -37,9 +56,11 @@ var releaseCmd = &cobra.Command{
 			return fmt.Errorf("failed to create release structure: %w", err)
 		}
 
-		// Generate changelog
-		if err := generateChangelog(tag); err != nil {
-			return fmt.Errorf("failed to generate changelog: %w", err)
+		// Generate changelog if enabled
+		if cfg.Release.Changelog.Enabled {
+			if err := generateChangelog(tag); err != nil {
+				return fmt.Errorf("failed to generate changelog: %w", err)
+			}
 		}
 
 		// Build binaries
@@ -61,9 +82,9 @@ func init() {
 	rootCmd.AddCommand(releaseCmd)
 	releaseCmd.Flags().StringP("repo", "r", "", "GitHub repository URL (e.g., github.com/user/repo)")
 	releaseCmd.Flags().StringP("tag", "t", "", "Release tag (e.g., v1.0.0)")
+	releaseCmd.Flags().StringP("config", "c", "goreleaser.yaml", "Path to configuration file")
 	releaseCmd.Flags().BoolVar(&draft, "draft", false, "Create a draft release")
 	releaseCmd.Flags().BoolVar(&prerelease, "prerelease", false, "Create a prerelease")
-	releaseCmd.MarkFlagRequired("repo")
 	releaseCmd.MarkFlagRequired("tag")
 }
 
@@ -84,8 +105,7 @@ func buildBinaries(tag string) error {
 	opts := build.BuildOptions{
 		OutputDir: distDir,
 		Version:   tag,
-		MainFile:  "main.go",
-		LdFlags:   fmt.Sprintf("-X main.version=%s", tag),
+		Config:    cfg,
 	}
 
 	// Build binaries for all platforms

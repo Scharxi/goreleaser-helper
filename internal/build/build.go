@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"goreleaser-helper/internal/config"
 )
 
 // Platform represents a build target platform
@@ -27,8 +29,7 @@ var platforms = []Platform{
 type BuildOptions struct {
 	OutputDir string
 	Version   string
-	MainFile  string
-	LdFlags   string
+	Config    *config.Config
 }
 
 // Build creates binaries for all specified platforms
@@ -44,7 +45,7 @@ func Build(opts BuildOptions) error {
 	}
 
 	// Build for each platform
-	for _, platform := range platforms {
+	for _, platform := range opts.Config.Build.Platforms {
 		if err := buildForPlatform(platform, opts, wd); err != nil {
 			return fmt.Errorf("failed to build for %s/%s: %w", platform.OS, platform.Arch, err)
 		}
@@ -53,7 +54,10 @@ func Build(opts BuildOptions) error {
 	return nil
 }
 
-func buildForPlatform(platform Platform, opts BuildOptions, wd string) error {
+func buildForPlatform(platform struct {
+	OS   string `yaml:"os"`
+	Arch string `yaml:"arch"`
+}, opts BuildOptions, wd string) error {
 	// Set the output filename
 	outputName := fmt.Sprintf("%s_%s_%s", filepath.Base(wd), platform.OS, platform.Arch)
 	if platform.OS == "windows" {
@@ -68,12 +72,12 @@ func buildForPlatform(platform Platform, opts BuildOptions, wd string) error {
 
 	// Prepare build command
 	args := []string{"build"}
-	if opts.LdFlags != "" {
-		args = append(args, "-ldflags", opts.LdFlags)
+	if opts.Config.Build.LdFlags != "" {
+		args = append(args, "-ldflags", opts.Config.Build.LdFlags)
 	}
 	args = append(args, "-o", outputPath)
-	if opts.MainFile != "" {
-		args = append(args, opts.MainFile)
+	if opts.Config.Build.MainFile != "" {
+		args = append(args, opts.Config.Build.MainFile)
 	}
 
 	// Execute build command

@@ -1,0 +1,83 @@
+project:
+  name: goreleaser-helper
+  description: A helper tool for managing Go releases
+  version: "1.0.0"
+  license: MIT
+  authors:
+    - Your Name <your.email@example.com>
+
+build:
+  mainFile: main.go
+  outputDir: dist
+  platforms:
+    - os: darwin
+      arch: amd64
+    - os: darwin
+      arch: arm64
+    - os: linux
+      arch: amd64
+    - os: linux
+      arch: arm64
+    - os: windows
+      arch: amd64
+    - os: windows
+      arch: arm64
+  ldflags: "-X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}"
+  env:
+    CGO_ENABLED: "0"
+  before:
+    - go mod tidy
+    - go vet ./...
+  after:
+    - go test ./...
+
+release:
+  defaultBranch: main
+  changelog:
+    enabled: true
+    path: CHANGELOG.md
+    format: markdown
+  assets:
+    include:
+      - "LICENSE"
+      - "README.md"
+      - "CHANGELOG.md"
+    exclude:
+      - "*.tmp"
+      - "*.log"
+  sign:
+    enabled: false
+    key: ""
+    pass: ""
+
+github:
+  defaultRepo: ""  # Set this to your default repository
+  tokenEnv: GITHUB_TOKEN
+  labels:
+    - "enhancement"
+    - "bug"
+    - "documentation"
+  milestones:
+    - "v1.0.0"
+    - "v1.1.0"
+  teams:
+    - "maintainers"
+    - "contributors"
+
+notifications:
+  slack:
+    enabled: false
+    webhook: ""
+  discord:
+    enabled: false
+    webhook: ""
+  email:
+    enabled: false
+    from: "releases@example.com"
+    to:
+      - "team@example.com"
+    smtp:
+      host: "smtp.example.com"
+      port: 587
+      username: ""
+      password: "" 
